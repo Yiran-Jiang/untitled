@@ -42,9 +42,6 @@ int main() {
     double           start_t_MPI_Wtime, end_t_MPI_Wtime;
     clock_t          time_s, time_e;
 
-
-
-
     MPI_Init(NULL,NULL);
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
@@ -53,7 +50,7 @@ int main() {
 
     Init_grid(&grid_global);
     if (world_rank == 0) {
-        fp = fopen("A.dat","r");
+        fp = fopen(Matrix_A_file,"r");
         while((recv = fgetc(fp)) != EOF)
         {
             if(recv =='\n') n_order++;
