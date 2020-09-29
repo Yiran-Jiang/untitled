@@ -21,16 +21,18 @@ typedef struct {
     double  entries[MAX];
 #define Entry(A,i,j) (*(((A)->entries) + ((A)->n_order_block)*(i) + (j)))
 } Block_Matrix;
-
+int              check(int N,char* filenameA,char* filenameB,char* filenameC);
 void             readMatrixA(Block_Matrix*  block_A,GRID* grid_global,int n, char* filename);
 void             readMatrixB(Block_Matrix* block_B,GRID* grid_global, int n,char* filename);
 void             C_zero_initialized(Block_Matrix* matrix);
 void             Block_matrix_multiply(Block_Matrix* block_A,Block_Matrix* block_B, Block_Matrix* block_C);
-void             create_A_type_MPI_dt(Block_Matrix* block_A);
+void             create_A_type_MPI_dt(Block_Matrix* block_M);
 void             Write_matrix_C(Block_Matrix*  block_C ,GRID* grid_global,int n,char* filename);
+void             Init_grid(GRID* grid_global);
+void             Fox(GRID* grid_global, Block_Matrix*  block_A, Block_Matrix*  block_B, Block_Matrix*  block_C);
 MPI_Datatype     block_matrix_mpi_dt;
 
-int main(int argc, char* argv[]) {
+int main() {
     FILE             *fp;
     GRID             grid_global;
     Block_Matrix*  block_A=(Block_Matrix*) malloc(sizeof(Block_Matrix));
@@ -40,8 +42,8 @@ int main(int argc, char* argv[]) {
     double           start_t_MPI_Wtime, end_t_MPI_Wtime;
     clock_t          time_s, time_e;
 
-    void Init_grid(GRID*  grid_global);
-    void Fox(GRID* grid_global, Block_Matrix*  block_A, Block_Matrix*  block_B, Block_Matrix*  block_C);
+
+
 
     MPI_Init(NULL,NULL);
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
@@ -90,10 +92,13 @@ int main(int argc, char* argv[]) {
         printf("The time for Parallel Fox algorithm execution(calculate from clock()): %f seconds\n", (double)(time_e - time_s) / CLOCKS_PER_SEC);
     }
     MPI_Finalize();
+    int res = check(n_order,Matrix_A_file,Matrix_B_file,Matrix_C_file);
+    printf("%d\n",res);
+
     exit(0);
 }
 
-void Init_grid(GRID*  grid_global) {
+void Init_grid(GRID* grid_global) {
     int i,reorder=1,ndims_cart_grid=2;
     int row_col_dim[ndims_cart_grid],periodic_dim[ndims_cart_grid],coords_process[ndims_cart_grid];
     int keep_dims_row[ndims_cart_grid];
@@ -277,7 +282,7 @@ void create_A_type_MPI_dt(Block_Matrix*  block_M) {
     MPI_Aint      start_address;
     MPI_Aint      end_address;
 
-    MPI_Type_contiguous(pow(block_M->n_order_block,2),MPI_DOUBLE, &new_mpi_dt);
+    MPI_Type_contiguous((int)pow(block_M->n_order_block,2),MPI_DOUBLE, &new_mpi_dt);
 
     for(i=0;i<num_blocks;i++) {
         blocklengths[i] = 1;
@@ -311,5 +316,101 @@ void Block_matrix_multiply(Block_Matrix*  block_A, Block_Matrix*  block_B,Block_
             for (k = 0; k < block_B->n_order_block; k++)
                 Entry(block_C,i,j) = Entry(block_C,i,j)+ Entry(block_A,i,k)*Entry(block_B,j,k);//switch rows and columns continuous memory access
     }
+}
+
+int check(int N,char* filenameA,char* filenameB,char* filenameC){
+
+    FILE *fp_A;
+    FILE *fp_B;
+    FILE *fp_C;
+    double a[N][N],b[N][N],c[N][N];
+    int i,j,k;
+    fp_A=fopen(filenameA,"r");
+    fp_B=fopen(filenameB,"r");
+    fp_C=fopen(filenameC,"r");
+
+    printf("Read Matrix:\n");
+    for(i=0;i<N;i++)
+        for(j=0;j<N;j++)
+            fscanf(fp_A,"%lf",&a[i][j]);
+    for(i=0;i<N;i++)
+        for(j=0;j<N;j++)
+            fscanf(fp_B,"%lf",&b[i][j]);
+    for(i=0;i<N;i++)
+        for(j=0;j<N;j++)
+            fscanf(fp_C,"%lf",&c[i][j]);
+
+    //double r[N][1];
+    double **r;
+    r = (double **)malloc(N*sizeof(double*));
+    for(int i = 0; i < N; i++){
+        r[i] = (double*)malloc(sizeof(double));
+    }
+    for (i = 0; i < N; i++)
+    {
+        r[i][0] = rand() % 2;
+    }
+
+    //ouble br[N][1];
+    double **br;
+    br = (double **)malloc(N*sizeof(double*));
+    for(int i = 0; i < N; i++){
+        br[i] = (double*)malloc(sizeof(double));
+    }
+    for (i = 0; i < N; i++)
+    {
+        for (j = 0; j < 1; j++)
+        {
+            for (k = 0; k < N; k++)
+            {
+                br[i][j] = br[i][j] + b[i][k] * r[k][j];
+            }
+        }
+    }
+    //double cr[N][1];
+    double **cr;
+    cr = (double **)malloc(N*sizeof(double*));
+    for(int i = 0; i < N; i++){
+        cr[i] = (double*)malloc(sizeof(double));
+    }
+    for (i = 0; i < N; i++)
+    {
+        for (j = 0; j < 1; j++)
+        {
+            for (k = 0; k < N; k++)
+            {
+                cr[i][j] = cr[i][j] + c[i][k] * r[k][j];
+            }
+        }
+    }
+    //double abr[N][1];
+    double **abr;
+    abr = (double **)malloc(N*sizeof(double*));
+    for(int i = 0; i < N; i++){
+        abr[i] = (double*)malloc(sizeof(double));
+    }
+    for (i = 0; i < N; i++)
+    {
+        for (j = 0; j < 1; j++)
+        {
+            for (k = 0; k < N; k++)
+            {
+                abr[i][j] = abr[i][j] + a[i][k] * br[k][j];
+            }
+        }
+    }
+    for (i = 0; i < N; i++)
+    {
+        abr[i][0] -= cr[i][0];
+    }
+    int flag = 1;
+    for (i = 0; i < N; i++)
+    {
+        if (abr[i][0] <= 0.000005)
+            continue;
+        else
+            flag = 0;
+    }
+    return flag;
 }
 
